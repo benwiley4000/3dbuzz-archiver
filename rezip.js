@@ -60,13 +60,15 @@ fetch(pageUrl)
           bufferFetchPromise = fetch(url).then(res => res.buffer())
             .then(buffer => {
               // make sure we didn't get an error message from the server
-              try {
-                const errorObject = JSON.parse(buffer.toString());
-                // if this didn't fail, we have an error
-                returnedWith404.push(url);
-                return Promise.reject(errorObject);
-              } catch(e) {
-                // don't care if wasn't JSON
+              if (buffer.byteLength < 50000) {
+                try {
+                  const errorObject = JSON.parse(buffer.toString());
+                  // if this didn't fail, we have an error
+                  returnedWith404.push(url);
+                  return Promise.reject(errorObject);
+                } catch(e) {
+                  // don't care if wasn't JSON
+                }
               }
 
               loadingProgressBar.tick();
