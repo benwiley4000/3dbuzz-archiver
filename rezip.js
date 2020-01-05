@@ -37,7 +37,7 @@ fetch(pageUrl)
     );
     promisePool(
       zipUrls.map(url => (() => {
-        const zipName = url.slice(url.lastIndexOf('/'));
+        const zipName = url.slice(url.lastIndexOf('/') + 1);
         const cacheFileLocation = path.join(cacheFolderLocation, zipName);
         let bufferFetchPromise;
         if (fs.existsSync(cacheFileLocation)) {
