@@ -49,7 +49,7 @@ fetch(pageUrl)
               } else {
                 loadingProgressBar.tick();
                 loadingProgressBar.interrupt(
-                  `[CACHE] Successfully loaded ${zipName}.`
+                  `[CACHE] Successfully loaded ${zipName} (${formatBytes(data.byteLength)}).`
                 );
                 resolve(data);
               }
@@ -71,7 +71,7 @@ fetch(pageUrl)
 
               loadingProgressBar.tick();
               loadingProgressBar.interrupt(
-                `[NETWORK] Successfully loaded ${zipName}.`
+                `[NETWORK] Successfully loaded ${zipName} (${formatBytes(buffer.byteLength)}).`
               );
 
               if (!cacheCreationFailed) {
@@ -240,4 +240,17 @@ function promisePool(promiseReturningFunctions, maxConcurrent = 10) {
       reject(err);
     }
   });
+}
+
+// thanks https://stackoverflow.com/a/18650828/4956731
+function formatBytes(bytes, decimals = 2) {
+  if (bytes === 0) return '0 Bytes';
+
+  const k = 1024;
+  const dm = decimals < 0 ? 0 : decimals;
+  const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'];
+
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
 }
