@@ -171,7 +171,11 @@ fetch(pageUrl)
               console.warn(`  ${url}`);
             }
           }
-          console.log(`Finished in ${(Date.now() - startTime) / 1000}s.`)
+          console.log(`Finished in ${(Date.now() - startTime) / 1000}s.`);
+          const { size } = fs.statSync(outputZipfileName);
+          console.log(
+            `Final size of ${outputZipfileName}: ${formatBytes(size)}.`
+          );
         });
     })
     .catch(err => {
