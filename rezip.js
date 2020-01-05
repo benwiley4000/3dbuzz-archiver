@@ -136,8 +136,8 @@ fetch(pageUrl)
           loadingProgressBar.tick();
         });
       })),
-      // max 4 at a time (larger seems to take up too much memory)
-      4
+      // max 5 at a time (larger seems to take up too much memory)
+      5
     ).then(() => {
       const writeProgressBar = progress(
         `Writing ${outputZipfileName} to file...`,
