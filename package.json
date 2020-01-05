@@ -1,0 +1,10 @@
+{
+  "dependencies": {
+    "cheerio": "^1.0.0-rc.3",
+    "easy-zip2": "^3.1.0",
+    "mkdirp": "^0.5.1",
+    "node-fetch": "^2.6.0",
+    "progress": "^2.0.3",
+    "raf": "^3.4.1"
+  }
+}
