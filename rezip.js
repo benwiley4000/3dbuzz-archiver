@@ -1,130 +1,184 @@
 const cheerio = require('cheerio');
-const fetch = require('node-fetch');
-const { EasyZip } = require('easy-zip2');
 const ProgressBar = require('progress');
 const requestAnimationFrame = require('raf');
 const mkdirp = require('mkdirp');
 const fs = require('fs');
 const path = require('path');
 
-const pageUrl = 'https://www.3dbuzz.com/';
-const outputZipfileName = '3dbuzz.zip';
-const cacheFolderLocation = '.cache';
-const failedFetchLogLocation = 'failed-fetches.log';
+const ZipWithDisc = require('./zipWithDisc');
+const {
+  getViewsForArrayBuffer,
+  getArrayBufferFromTypedArrays,
+  promisePool,
+  formatBytes,
+  request
+} = require('./utils');
+const {
+  PAGE_URL,
+  OUTPUT_ZIP_NAME,
+  CACHE_FOLDER_LOCATION,
+  FAILED_FETCHES_FILENAME
+} = require('./constants');
 
 let cacheCreationFailed = false;
 const failedFetches = [];
 const returnedWith404 = [];
+let totalBytes = 0;
+
+const TOO_MANY_FOR_NOW = 1000 * 1000 * 1000 * 100;
 
 const startTime = Date.now();
 
-console.log(`Fetching data from ${pageUrl}...`);
+console.log(`Fetching data from ${PAGE_URL}...`);
 
-fetch(pageUrl)
-  .then(res => res.text())
+request(PAGE_URL)
   .catch(err => {
     console.error(err);
-    console.error(`Failed to load ${pageUrl}.`);
+    console.error(`Failed to load ${PAGE_URL}.`);
     process.exit(1);
   })
   .then(text => cheerio.load(text))
   .then($ => $('a[href$=".zip"]').map((_, a) => a.attribs.href).get())
   .then(zipUrls => {
-    const outZip = new EasyZip();
-    const loadingProgressBar = progress(
-      `Loading files...`,
-      zipUrls.length * 2
-    );
+    const outZip = new ZipWithDisc();
+    const loadingProgressBar = progress(`Loading files...`, zipUrls.length * 2);
     promisePool(
       zipUrls.map(url => (() => {
         const zipName = url.slice(url.lastIndexOf('/') + 1);
-        const cacheFileLocation = path.join(cacheFolderLocation, zipName);
-        let bufferFetchPromise;
+        const cacheFileLocation = path.join(CACHE_FOLDER_LOCATION, zipName);
+        let arrayBufferFetchPromise;
+        let loadingFromCache = false;
+
+        const bufferFetchProgressBar = progress(
+          `Buffering ${zipName}...`,
+          // just setting a high number so we can be relatively precise
+          10000
+        );
+
         if (fs.existsSync(cacheFileLocation)) {
+          loadingFromCache = true;
           loadingProgressBar.interrupt(`[CACHE] Loading ${zipName}...`);
-          bufferFetchPromise = new Promise((resolve, reject) => {
-            fs.readFile(cacheFileLocation, (err, data) => {
+          loadingProgressBar.cancelRenderFrame();
+          arrayBufferFetchPromise = new Promise((resolve, reject) => {
+            fs.stat(cacheFileLocation, (err, stats) => {
               if (err) {
-                reject(err);
-              } else {
+                console.error(`Failed to read stats for ${cacheFileLocation}.`);
+                process.exit(1);
+              }
+              const buffers = [];
+              let byteLength = 0;
+              const readStream = fs.createReadStream(cacheFileLocation);
+              readStream.on('error', reject);
+              readStream.on('data', buffer => {
+                buffers.push(buffer);
+                byteLength += buffer.length;
+              });
+              readStream.on('end', () => {
+                loadingProgressBar.renderEachFrame();
                 loadingProgressBar.tick();
                 loadingProgressBar.interrupt(
-                  `[CACHE] Successfully loaded ${zipName} (${formatBytes(data.byteLength)}).`
+                  `[CACHE] Successfully loaded ${zipName} (${formatBytes(byteLength)}).`
                 );
-                resolve(data);
-              }
+                totalBytes += byteLength;
+                resolve(getArrayBufferFromTypedArrays(buffers));
+              });
             });
           });
         } else {
           loadingProgressBar.interrupt(`[NETWORK] Loading ${zipName}...`);
-          bufferFetchPromise = fetch(url).then(res => res.buffer())
-            .then(buffer => {
-              // make sure we didn't get an error message from the server
-              if (buffer.byteLength < 50000) {
-                try {
-                  const errorObject = JSON.parse(buffer.toString());
-                  // if this didn't fail, we have an error
-                  returnedWith404.push(url);
-                  return Promise.reject(errorObject);
-                } catch(e) {
-                  // don't care if wasn't JSON
-                }
+          loadingProgressBar.cancelRenderFrame();
+          arrayBufferFetchPromise = request(url, {
+            encoding: null,
+            onProgress(p) {
+              bufferFetchProgressBar.update(p);
+            }
+          }).then(arrayBuffer => {
+            loadingProgressBar.renderEachFrame();
+            // make sure we didn't get an error message from the server
+            if (arrayBuffer.byteLength < 50000) {
+              try {
+                const errorObject = JSON.parse(
+                  new Buffer(arrayBuffer).toString()
+                );
+                // if this didn't fail, we have an error
+                returnedWith404.push(url);
+                return Promise.reject(errorObject);
+              } catch(e) {
+                // don't care if wasn't JSON
               }
+            }
 
-              loadingProgressBar.tick();
-              loadingProgressBar.interrupt(
-                `[NETWORK] Successfully loaded ${zipName} (${formatBytes(buffer.byteLength)}).`
-              );
+            loadingProgressBar.tick();
+            const { byteLength } = arrayBuffer;
+            loadingProgressBar.interrupt(
+              `[NETWORK] Successfully loaded ${zipName} (${formatBytes(byteLength)}).`
+            );
+            totalBytes += byteLength;
 
-              if (!cacheCreationFailed) {
-                mkdirp(cacheFolderLocation, err => {
-                  if (err) {
-                    printError('Failed to create cache directory');
-                    cacheCreationFailed = true;
-                    return;
-                  }
-                  fs.writeFile(
-                    path.join(cacheFolderLocation, zipName),
-                    buffer,
-                    err => {
-                      if (err) {
-                        printError(`Failed to cache ${zipName}`);
-                      }
-                    }
-                  );
-                  function printError(message) {
-                    if (progress.curr >= progress.total) {
-                      console.error(message);
-                    } else {
-                      progress.interrupt(message);
-                    }
-                  }
-                });
-              }
-
-              return buffer;
-            });
+            return arrayBuffer;
+          });
         }
 
-        return bufferFetchPromise.then(buffer => {
+        if (totalBytes >= TOO_MANY_FOR_NOW) {
+          console.error(`Oops: ${formatBytes(totalBytes)}.`);
+          process.exit(1);
+        }
+
+        return arrayBufferFetchPromise.then(arrayBuffer => {
           let folderName = zipName.slice(0, -4);
           const partStringIndex = folderName.search(/-part-[0-9]+$/);
           if (partStringIndex > -1) {
             folderName = folderName.slice(0, partStringIndex);
           }
-          return outZip
-            .folder(folderName)
-            .loadAsync(buffer, { createFolders: true })
+          let loadZipPromise;
+          try {
+            loadZipPromise = outZip.folder(folderName).loadAsync(arrayBuffer, {
+              createFolders: true
+            });
+          } catch(err) {
+            loadZipPromise = Promise.reject(err);
+          }
+          loadZipPromise
+            .catch(err => {
+              console.error(err);
+              console.error(`Failed to include ${url} in output zip.`);
+              console.error(
+                `(Total bytes loaded so far: ${formatBytes(totalBytes)}`
+              );
+              process.exit(1);
+            })
             .then(() => {
               loadingProgressBar.tick();
               loadingProgressBar.interrupt(
                 `${zipName} included in output zip.`
               );
-            })
-            .catch(err => {
-              console.error(err);
-              console.error(`Failed to include ${url} in output zip.`);
-              process.exit(1);
+
+              if (!loadingFromCache && !cacheCreationFailed) {
+                mkdirp(CACHE_FOLDER_LOCATION, err => {
+                  if (err) {
+                    console.error('Failed to create cache directory');
+                    cacheCreationFailed = true;
+                    return;
+                  }
+                  appendBuffers(getViewsForArrayBuffer(arrayBuffer));
+                  function appendBuffers(buffers) {
+                    if (!buffers.length) {
+                      return;
+                    }
+                    fs.appendFile(
+                      path.join(CACHE_FOLDER_LOCATION, zipName),
+                      buffers[0],
+                      err => {
+                        if (err) {
+                          console.error(`Failed to cache ${zipName}`);
+                        } else {
+                          appendBuffers(buffers.slice(1));
+                        }
+                      }
+                    );
+                  }
+                });
+              }
             });
         })
         .catch(err => {
@@ -136,17 +190,19 @@ fetch(pageUrl)
           loadingProgressBar.tick();
         });
       })),
-      // max 5 at a time (larger seems to take up too much memory)
-      5
+      // max 1 at a time (larger seems to take up too much memory)
+      // TOOD: if we ever raise this again we will need to have a
+      // different way of displaying file load progress
+      1
     ).then(() => {
       const writeProgressBar = progress(
-        `Writing ${outputZipfileName} to file...`,
+        `Writing ${OUTPUT_ZIP_NAME} to file...`,
         // just setting a high number so we can be relatively precise
         10000
       );
       let lastFile;
       outZip.writeToFileStream(
-        outputZipfileName,
+        OUTPUT_ZIP_NAME,
         ({ percent, currentFile }) => {
           writeProgressBar.update(percent / 100);
           if (lastFile !== currentFile) {
@@ -156,7 +212,7 @@ fetch(pageUrl)
         },
         () => {
           writeProgressBar.update(1);
-          console.log(`${outputZipfileName} written to file.`);
+          console.log(`${OUTPUT_ZIP_NAME} written to file.`);
           if (failedFetches.length) {
             console.warn('Warning! Failed to include the following archives:');
             for (const url of failedFetches) {
@@ -172,22 +228,36 @@ fetch(pageUrl)
             }
           }
           console.log(`Finished in ${(Date.now() - startTime) / 1000}s.`);
-          const { size } = fs.statSync(outputZipfileName);
+          const { size } = fs.statSync(OUTPUT_ZIP_NAME);
           console.log(
-            `Final size of ${outputZipfileName}: ${formatBytes(size)}.`
+            `Final size of ${OUTPUT_ZIP_NAME}: ${formatBytes(size)}.`
           );
         });
     })
     .catch(err => {
       console.error(err);
-      console.error(`Failed to write ${outputZipfileName} to file.`);
+      console.error(`Failed to write ${OUTPUT_ZIP_NAME} to file.`);
       process.exit(1);
     });
   });
 
+class PauseableProgressBar extends ProgressBar {
+  renderEachFrame() {
+    this.cancelRenderFrame();
+    this.render();
+    this.animationFrame = requestAnimationFrame(() => {
+      this.renderEachFrame();
+    });
+  }
+
+  cancelRenderFrame() {
+    requestAnimationFrame.cancel(this.animationFrame);
+  }
+}
+
 function progress(description, total) {
   let frame;
-  const bar = new ProgressBar(
+  const bar = new PauseableProgressBar(
     `${description} [:bar] :percent :elapseds elapsed :etas remaining`,
     {
       width: 39,
@@ -195,68 +265,10 @@ function progress(description, total) {
       width: 60 - description.length,
       renderThrottle: 100,
       callback: () => {
-        requestAnimationFrame.cancel(frame);
+        bar.cancelRenderFrame();
       }
     }
   );
-  function renderEachFrame() {
-    bar.render();
-    frame = requestAnimationFrame(renderEachFrame);
-  }
-  renderEachFrame();
+  bar.renderEachFrame();
   return bar;
-}
-
-function promisePool(promiseReturningFunctions, maxConcurrent = 10) {
-  return new Promise((resolve, reject) => {
-    if (promiseReturningFunctions.length === 0) {
-      resolve([]);
-      return;
-    }
-    const results = [];
-    let rejected = false;
-    let nextPromiseIndex = 0;
-    let resolvedCount = 0;
-    while (
-      nextPromiseIndex < maxConcurrent &&
-      nextPromiseIndex < promiseReturningFunctions.length
-    ) {
-      addOneToPool();
-    }
-    function addOneToPool() {
-      const index = nextPromiseIndex;
-      promiseReturningFunctions[index]()
-        .then(res => onResolve(res, index)).catch(onReject);
-      nextPromiseIndex++;
-    }
-    function onResolve(data, index) {
-      if (rejected) {
-        return;
-      }
-      resolvedCount++;
-      results[index] = data;
-      if (nextPromiseIndex < promiseReturningFunctions.length) {
-        addOneToPool();
-      } else if (resolvedCount === promiseReturningFunctions.length) {
-        resolve(results);
-      }
-    }
-    function onReject(err) {
-      rejected = true;
-      reject(err);
-    }
-  });
-}
-
-// thanks https://stackoverflow.com/a/18650828/4956731
-function formatBytes(bytes, decimals = 2) {
-  if (bytes === 0) return '0 Bytes';
-
-  const k = 1024;
-  const dm = decimals < 0 ? 0 : decimals;
-  const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'];
-
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
 }
