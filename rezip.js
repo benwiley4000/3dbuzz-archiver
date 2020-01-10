@@ -11,7 +11,8 @@ const {
   getArrayBufferFromTypedArrays,
   promisePool,
   formatBytes,
-  request
+  request,
+  timeout
 } = require('./utils');
 const {
   PAGE_URL,
@@ -24,8 +25,6 @@ let cacheCreationFailed = false;
 const failedFetches = [];
 const returnedWith404 = [];
 let totalBytes = 0;
-
-const TOO_MANY_FOR_NOW = 1000 * 1000 * 1000 * 100;
 
 const startTime = Date.now();
 
@@ -87,41 +86,46 @@ request(PAGE_URL)
         } else {
           loadingProgressBar.interrupt(`[NETWORK] Loading ${zipName}...`);
           loadingProgressBar.cancelRenderFrame();
-          arrayBufferFetchPromise = request(url, {
-            encoding: null,
-            onProgress(p) {
-              bufferFetchProgressBar.update(p);
-            }
-          }).then(arrayBuffer => {
-            loadingProgressBar.renderEachFrame();
-            // make sure we didn't get an error message from the server
-            if (arrayBuffer.byteLength < 50000) {
-              try {
-                const errorObject = JSON.parse(
-                  new Buffer(arrayBuffer).toString()
-                );
-                // if this didn't fail, we have an error
-                returnedWith404.push(url);
-                return Promise.reject(errorObject);
-              } catch(e) {
-                // don't care if wasn't JSON
+          arrayBufferFetchPromise = requestArrayBuffer();
+          function requestArrayBuffer(tries = 3) {
+            return request(url, {
+              encoding: null,
+              onProgress(p) {
+                bufferFetchProgressBar.update(p);
               }
-            }
+            }).then(arrayBuffer => {
+              loadingProgressBar.renderEachFrame();
+              // make sure we didn't get an error message from the server
+              if (arrayBuffer.byteLength < 50000) {
+                try {
+                  const errorObject = JSON.parse(
+                    new Buffer(arrayBuffer).toString()
+                  );
+                  // if this didn't fail, we have an error
+                  returnedWith404.push(url);
+                  return Promise.reject(errorObject);
+                } catch(e) {
+                  // don't care if wasn't JSON
+                }
+              }
 
-            loadingProgressBar.tick();
-            const { byteLength } = arrayBuffer;
-            loadingProgressBar.interrupt(
-              `[NETWORK] Successfully loaded ${zipName} (${formatBytes(byteLength)}).`
-            );
-            totalBytes += byteLength;
+              loadingProgressBar.tick();
+              const { byteLength } = arrayBuffer;
+              loadingProgressBar.interrupt(
+                `[NETWORK] Successfully loaded ${zipName} (${formatBytes(byteLength)}).`
+              );
+              totalBytes += byteLength;
 
-            return arrayBuffer;
-          });
-        }
-
-        if (totalBytes >= TOO_MANY_FOR_NOW) {
-          console.error(`Oops: ${formatBytes(totalBytes)}.`);
-          process.exit(1);
+              return arrayBuffer;
+            }).catch(err => {
+              const triesLeft = tries - 1;
+              if (triesLeft > 0) {
+                const wait = triesLeft === 1 ? 7000 : 3000;
+                return timeout(wait).then(() => requestArrayBuffer(triesLeft));
+              }
+              return Promise.reject(err);
+            });
+          }
         }
 
         return arrayBufferFetchPromise.then(arrayBuffer => {
@@ -195,6 +199,24 @@ request(PAGE_URL)
       // different way of displaying file load progress
       1
     ).then(() => {
+      let failedFetchesLog = '';
+      if (failedFetches.length) {
+        failedFetchesLog +=
+          'Warning! Failed to include the following archives:';
+        for (const url of failedFetches) {
+          failedFetchesLog += `  ${url}`;
+        }
+      }
+      if (returnedWith404.length) {
+        failedFetchesLog += 'The following urls seem to be unavailable:';
+        for (const url of returnedWith404) {
+          failedFetchesLog += `  ${url}`;
+        }
+      }
+      if (failedFetchesLog) {
+        outZip.file(FAILED_FETCHES_FILENAME, failedFetchesLog);
+      }
+
       const writeProgressBar = progress(
         `Writing ${OUTPUT_ZIP_NAME} to file...`,
         // just setting a high number so we can be relatively precise
@@ -213,19 +235,8 @@ request(PAGE_URL)
         () => {
           writeProgressBar.update(1);
           console.log(`${OUTPUT_ZIP_NAME} written to file.`);
-          if (failedFetches.length) {
-            console.warn('Warning! Failed to include the following archives:');
-            for (const url of failedFetches) {
-              console.warn(`  ${url}`);
-            }
-          }
-          if (returnedWith404.length) {
-            console.warn(
-              'The following urls seem to be permanently unavailable:'
-            );
-            for (const url of returnedWith404) {
-              console.warn(`  ${url}`);
-            }
+          if (failedFetchesLog) {
+            console.log(failedFetchesLog);
           }
           console.log(`Finished in ${(Date.now() - startTime) / 1000}s.`);
           const { size } = fs.statSync(OUTPUT_ZIP_NAME);
