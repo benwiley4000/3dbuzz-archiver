@@ -20,6 +20,7 @@ const {
   OUTPUT_ZIP_NAME,
   CACHE_FOLDER_LOCATION,
   FAILED_FETCHES_FILENAME,
+  ROOT_DIR_NAME,
   MAX_CONCURRENT
 } = require('./constants');
 
@@ -43,6 +44,7 @@ request(PAGE_URL)
   .then($ => $('a[href$=".zip"]').map((_, a) => a.attribs.href).get())
   .then(zipUrls => {
     const outZip = new ZipWithDisc();
+    const rootDir = outZip.folder(ROOT_DIR_NAME);
     const loadingProgressBar = progress(`Loading files...`, zipUrls.length * 2);
     promisePool(
       zipUrls.map(url => (() => {
@@ -105,7 +107,10 @@ request(PAGE_URL)
                     new Buffer(arrayBuffer).toString()
                   );
                   // if this didn't fail, we have an error
-                  returnedWith404.push(url);
+                  if (tries === 1) {
+                    // it's the last try.. so we'll error out.
+                    returnedWith404.push(url);
+                  }
                   return Promise.reject(errorObject);
                 } catch(e) {
                   // don't care if wasn't JSON
@@ -139,7 +144,7 @@ request(PAGE_URL)
           }
           let loadZipPromise;
           try {
-            loadZipPromise = outZip.folder(folderName).loadAsync(arrayBuffer, {
+            loadZipPromise = rootDir.folder(folderName).loadAsync(arrayBuffer, {
               createFolders: true
             });
           } catch(err) {
@@ -202,19 +207,19 @@ request(PAGE_URL)
       let failedFetchesLog = '';
       if (failedFetches.length) {
         failedFetchesLog +=
-          'Warning! Failed to include the following archives:';
+          'Warning! Failed to include the following archives:\n';
         for (const url of failedFetches) {
-          failedFetchesLog += `  ${url}`;
+          failedFetchesLog += `  ${url}\n`;
         }
       }
       if (returnedWith404.length) {
-        failedFetchesLog += 'The following urls seem to be unavailable:';
+        failedFetchesLog += 'The following urls seem to be unavailable:\n';
         for (const url of returnedWith404) {
-          failedFetchesLog += `  ${url}`;
+          failedFetchesLog += `  ${url}\n`;
         }
       }
       if (failedFetchesLog) {
-        outZip.file(FAILED_FETCHES_FILENAME, failedFetchesLog);
+        rootDir.file(FAILED_FETCHES_FILENAME, failedFetchesLog);
       }
 
       const writeProgressBar = progress(
