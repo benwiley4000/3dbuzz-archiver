@@ -19,7 +19,8 @@ const {
   ARCHIVE_URL_PREFIX,
   OUTPUT_ZIP_NAME,
   CACHE_FOLDER_LOCATION,
-  FAILED_FETCHES_FILENAME
+  FAILED_FETCHES_FILENAME,
+  MAX_CONCURRENT
 } = require('./constants');
 
 let cacheCreationFailed = false;
@@ -196,10 +197,7 @@ request(PAGE_URL)
           loadingProgressBar.tick();
         });
       })),
-      // max 1 at a time (larger seems to take up too much memory)
-      // TOOD: if we ever raise this again we will need to have a
-      // different way of displaying file load progress
-      1
+      MAX_CONCURRENT
     ).then(() => {
       let failedFetchesLog = '';
       if (failedFetches.length) {

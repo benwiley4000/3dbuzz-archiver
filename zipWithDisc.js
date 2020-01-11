@@ -18,7 +18,7 @@ const {
   readFile,
   timeout
 } = require('./utils');
-const { UINT8_VIEW_SIZE } = require('./constants');
+const { UINT8_VIEW_SIZE, MAX_CONCURRENT } = require('./constants');
 
 const tempZipWorkDir = '.zip-with-disc-work-dir-dont-mess-with-this';
 const hashCounts = {};
@@ -107,11 +107,10 @@ class FileSequenceWorker extends GenericWorker {
 }
 
 // prevent too many concurrent reads
-const maxConcurrent = 4;
 const callbackQueue = [];
 let activePromises = 0;
 function queueCallback(callback) {
-  if (activePromises < maxConcurrent) {
+  if (activePromises < MAX_CONCURRENT) {
     executeCallback(callback);
   } else {
     callbackQueue.push(callback);
