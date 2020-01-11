@@ -167,12 +167,12 @@ request(PAGE_URL)
                     cacheCreationFailed = true;
                     return;
                   }
-                  appendBuffers(getViewsForArrayBuffer(arrayBuffer));
-                  function appendBuffers(buffers) {
+                  appendBuffers(getViewsForArrayBuffer(arrayBuffer), true);
+                  function appendBuffers(buffers, deletePrevious = false) {
                     if (!buffers.length) {
                       return;
                     }
-                    fs.appendFile(
+                    fs[deletePrevious ? 'writeFile' : 'appendFile'](
                       path.join(CACHE_FOLDER_LOCATION, zipName),
                       buffers[0],
                       err => {
