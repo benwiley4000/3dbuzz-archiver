@@ -21,15 +21,18 @@ const {
 const { UINT8_VIEW_SIZE } = require('./constants');
 
 const tempZipWorkDir = '.zip-with-disc-work-dir-dont-mess-with-this';
+const hashCounts = {};
 
 class FileSequenceWorker extends GenericWorker {
-  constructor(filenamesP) {
+  constructor(md5HashesP) {
     super('FileSequenceWorker');
     this.eventualBytes = 0;
     this.streamStarted = false;
     this.readStream = null;
-    this.promise = filenamesP.then(filenames => {
+    this.promise = md5HashesP.then(md5Hashes => {
       return new Promise((resolve, reject) => {
+        const filenames = md5Hashes
+          .map(hash => path.join(tempZipWorkDir, hash));
         let filesLeftToStat = filenames.length;
         for (const filename of filenames) {
           fs.stat(filename, (err, { size }) => {
@@ -39,7 +42,7 @@ class FileSequenceWorker extends GenericWorker {
             }
             this.eventualBytes += size;
             if (--filesLeftToStat === 0) {
-              resolve(filenames);
+              resolve(md5Hashes);
             }
           });
         }
@@ -62,12 +65,13 @@ class FileSequenceWorker extends GenericWorker {
       });
     } else {
       let bytesStreamed = 0;
-      const streamFileSequence = filenames => {
-        if (!filenames.length) {
+      const streamFileSequence = md5Hashes => {
+        if (!md5Hashes.length) {
           this.end();
           return;
         }
-        const filename = filenames[0];
+        const md5Hash = md5Hashes[0];
+        const filename = path.join(tempZipWorkDir, md5Hash);
         const stream = this.readStream = fs.createReadStream(filename);
         stream.on('error', err => {
           this.error(err);
@@ -82,11 +86,18 @@ class FileSequenceWorker extends GenericWorker {
           });
         });
         stream.on('end', () => {
-          // in other cases this would be unwise but to save disc space
-          // we should remove the cached file, and we assume we won't
-          // need to read it twice.
-          fs.unlink(filename, () => null);
-          streamFileSequence(filenames.slice(1));
+          if (--hashCounts[md5Hash] === 0) {
+            // in other cases this would be unwise but to save disc space
+            // we should remove the cached file, and we assume we won't
+            // need to read it again.
+            fs.unlink(filename, () => null);
+            delete hashCounts[md5Hash];
+          }
+          // otherwise there were multiple files with this same
+          // content... which is weird, but we need to wait for them
+          // all to be written.
+
+          streamFileSequence(md5Hashes.slice(1));
         });
       };
       this.promise = this.promise.then(streamFileSequence);
@@ -130,9 +141,9 @@ class CompressedObjectOnDisc extends CompressedObject {
             throw new Error('We cannot read before writing compressedContent.');
             return;
           }
-          // we actually just return an array of filenames as the "content"...
+          // we actually just return an array of hashes as the "content"...
           // our FileSequenceWorker will convert this into a read stream.
-          resolve(this.md5Hashes.map(hash => path.join(tempZipWorkDir, hash)));
+          resolve(this.md5Hashes);
         } catch(err) {
           if (tries) {
             await timeout(waitPeriod);
@@ -169,12 +180,17 @@ class CompressedObjectOnDisc extends CompressedObject {
           md5Hash = h.digest('hex');
           this.md5Hashes.push(md5Hash);
         }
-        fs.writeFile(path.join(tempZipWorkDir, md5Hash), view, err => {
-          if (err) {
-            console.error(`Failed to write temp data for zip (${md5Hash}).`);
-            process.exit(1);
-          }
-        });
+        if (!hashCounts[md5Hash]) {
+          hashCounts[md5Hash] = 1;
+          fs.writeFile(path.join(tempZipWorkDir, md5Hash), view, err => {
+            if (err) {
+              console.error(`Failed to write temp data for zip (${md5Hash}).`);
+              process.exit(1);
+            }
+          });
+        } else {
+          hashCounts[md5Hash] += 1;
+        }
       }
     });
 	}
