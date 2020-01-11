@@ -6,5 +6,21 @@
     "progress": "^2.0.3",
     "raf": "^3.4.1",
     "rimraf": "^3.0.0"
-  }
+  },
+  "name": "3dbuzz-archiver",
+  "version": "0.1.0",
+  "description": "Merge 3dbuzz's free online archives into one huge zip file.",
+  "main": "3dbuzzArchiver.js",
+  "devDependencies": {},
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "3dbuzz",
+    "archive",
+    "zip",
+    "jszip"
+  ],
+  "author": "Ben Wiley",
+  "license": "MIT"
 }
