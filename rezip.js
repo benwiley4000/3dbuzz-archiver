@@ -16,6 +16,7 @@ const {
 } = require('./utils');
 const {
   PAGE_URL,
+  ARCHIVE_URL_PREFIX,
   OUTPUT_ZIP_NAME,
   CACHE_FOLDER_LOCATION,
   FAILED_FETCHES_FILENAME
@@ -36,6 +37,7 @@ request(PAGE_URL)
     console.error(`Failed to load ${PAGE_URL}.`);
     process.exit(1);
   })
+  .then(removeWaybackToolbar)
   .then(text => cheerio.load(text))
   .then($ => $('a[href$=".zip"]').map((_, a) => a.attribs.href).get())
   .then(zipUrls => {
@@ -282,4 +284,10 @@ function progress(description, total) {
   );
   bar.renderEachFrame();
   return bar;
+}
+
+function removeWaybackToolbar(html) {
+  const part1 = html.split('<!-- BEGIN WAYBACK TOOLBAR INSERT -->')[0];
+  const part2 = html.split('<!-- END WAYBACK TOOLBAR INSERT -->')[1];
+  return (part1 + part2).replace(new RegExp(ARCHIVE_URL_PREFIX, 'g'), '');
 }
