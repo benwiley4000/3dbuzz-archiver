@@ -18,7 +18,7 @@ const {
   readFile,
   timeout
 } = require('./utils');
-const { UINT8_VIEW_SIZE, MAX_CONCURRENT } = require('./constants');
+const { UINT8_VIEW_SIZE } = require('./constants');
 
 const tempZipWorkDir = '.zip-with-disc-work-dir-dont-mess-with-this';
 const hashCounts = {};
@@ -106,27 +106,6 @@ class FileSequenceWorker extends GenericWorker {
   }
 }
 
-// prevent too many concurrent reads
-const callbackQueue = [];
-let activePromises = 0;
-function queueCallback(callback) {
-  if (activePromises < MAX_CONCURRENT) {
-    executeCallback(callback);
-  } else {
-    callbackQueue.push(callback);
-  }
-}
-function executeCallback(callback) {
-  activePromises++;
-  callback().finally(() => {
-    activePromises--;
-    if (callbackQueue.length) {
-      const cb = callbackQueue.shift();
-      executeCallback(cb);
-    }
-  });
-}
-
 class CompressedObjectOnDisc extends CompressedObject {
 	get compressedContent() {
     return new Promise(async (resolve, reject) => {
@@ -146,13 +125,13 @@ class CompressedObjectOnDisc extends CompressedObject {
         } catch(err) {
           if (tries) {
             await timeout(waitPeriod);
-            queueCallback(attemptRead);
+            attemptRead();
           } else {
             reject(err);
           }
         }
       }
-      queueCallback(attemptRead);
+      attemptRead();
     });
 	}
 
