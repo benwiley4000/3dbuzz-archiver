@@ -1,0 +1,4 @@
+#!/bin/bash
+
+# execute the main node script located in the same directory with this file
+node "${BASH_SOURCE%/*}/"
