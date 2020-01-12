@@ -18,9 +18,8 @@ const {
   readFile,
   timeout
 } = require('./utils');
-const { UINT8_VIEW_SIZE } = require('./constants');
+const { UINT8_VIEW_SIZE, TEMP_ZIP_WORK_DIR } = require('./constants');
 
-const tempZipWorkDir = '.zip-with-disc-work-dir-dont-mess-with-this';
 const hashCounts = {};
 
 class FileSequenceWorker extends GenericWorker {
@@ -32,7 +31,7 @@ class FileSequenceWorker extends GenericWorker {
     this.promise = md5HashesP.then(md5Hashes => {
       return new Promise((resolve, reject) => {
         const filenames = md5Hashes
-          .map(hash => path.join(tempZipWorkDir, hash));
+          .map(hash => path.join(TEMP_ZIP_WORK_DIR, hash));
         let filesLeftToStat = filenames.length;
         for (const filename of filenames) {
           fs.stat(filename, (err, { size }) => {
@@ -71,7 +70,7 @@ class FileSequenceWorker extends GenericWorker {
           return;
         }
         const md5Hash = md5Hashes[0];
-        const filename = path.join(tempZipWorkDir, md5Hash);
+        const filename = path.join(TEMP_ZIP_WORK_DIR, md5Hash);
         const stream = this.readStream = fs.createReadStream(filename);
         stream.on('error', err => {
           this.error(err);
@@ -136,7 +135,7 @@ class CompressedObjectOnDisc extends CompressedObject {
 	}
 
 	set compressedContent(data) {
-    mkdirp(tempZipWorkDir, err => {
+    mkdirp(TEMP_ZIP_WORK_DIR, err => {
       if (err) {
         console.error('Failed to create zip work directory.');
         process.exit(1);
@@ -160,7 +159,7 @@ class CompressedObjectOnDisc extends CompressedObject {
         }
         if (!hashCounts[md5Hash]) {
           hashCounts[md5Hash] = 1;
-          fs.writeFile(path.join(tempZipWorkDir, md5Hash), view, err => {
+          fs.writeFile(path.join(TEMP_ZIP_WORK_DIR, md5Hash), view, err => {
             if (err) {
               console.error(`Failed to write temp data for zip (${md5Hash}).`);
               process.exit(1);

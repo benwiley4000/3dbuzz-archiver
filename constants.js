@@ -8,6 +8,7 @@ module.exports = {
   PAGE_URL: ARCHIVE_URL_PREFIX + PAGE_URL,
   OUTPUT_ZIP_NAME: '3dbuzz.zip',
   CACHE_FOLDER_LOCATION: '.cache',
+  TEMP_ZIP_WORK_DIR: '.zip-with-disc-work-dir-dont-mess-with-this',
   FAILED_FETCHES_FILENAME: 'FAILED_FETCHES.log',
   ROOT_DIR_NAME: '3dbuzz',
   // split arraybuffers into 500MB views
