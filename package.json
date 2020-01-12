@@ -1,6 +1,7 @@
 {
   "dependencies": {
     "cheerio": "^1.0.0-rc.3",
+    "dotenv": "^8.2.0",
     "easy-zip2": "^3.1.0",
     "mkdirp": "^0.5.1",
     "progress": "^2.0.3",
@@ -11,6 +12,9 @@
   "version": "0.1.0",
   "description": "Merge 3dbuzz's free online archives into one huge zip file.",
   "main": "index.js",
+  "engines": {
+    "node": ">=8.6.0"
+  },
   "devDependencies": {},
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"

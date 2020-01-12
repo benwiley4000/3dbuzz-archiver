@@ -1,7 +1,7 @@
 const ARCHIVE_URL_PREFIX = 'https://web.archive.org/web/20200109023732/';
 const PAGE_URL = 'https://www.3dbuzz.com/';
 
-module.exports = {
+const defaultConstants = {
   ARCHIVE_URL_PREFIX,
   PAGE_URL,
   // override PAGE_URL for now since the official link removed the links
@@ -20,5 +20,20 @@ module.exports = {
   // Node will split off anyway... not sure if that's still
   // true on 6-core processors but this is irrelevant for
   // most users anyway).
-  MAX_CONCURRENT: Number(process.env.MAX_CONCURRENT || 4)
+  MAX_CONCURRENT: 4
+};
+
+const overriddenConstants = {};
+for (const key in defaultConstants) {
+  if (key in process.env) {
+    const { constructor } = defaultConstants[key];
+    // env variables will be string values so we need to make
+    // sure our override matches the type of the default value
+    overriddenConstants[key] = constructor(process.env[key]);
+  }
+}
+
+module.exports = {
+  ...defaultConstants,
+  ...overriddenConstants
 };
