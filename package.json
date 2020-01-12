@@ -10,7 +10,7 @@
   "name": "3dbuzz-archiver",
   "version": "0.1.0",
   "description": "Merge 3dbuzz's free online archives into one huge zip file.",
-  "main": "3dbuzzArchiver.js",
+  "main": "index.js",
   "devDependencies": {},
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
