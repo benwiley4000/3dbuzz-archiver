@@ -10,6 +10,7 @@ const defaultConstants = {
   CACHE_FOLDER_LOCATION: '.cache',
   TEMP_ZIP_WORK_DIR: '.zip-with-disc-work-dir-dont-mess-with-this',
   FAILED_FETCHES_FILENAME: 'FAILED_FETCHES.log',
+  HTML_FILENAME: '3dbuzz.html',
   ROOT_DIR_NAME: '3dbuzz',
   // split arraybuffers into 500MB views
   UINT8_VIEW_SIZE: 1000 * 1000 * 500,
