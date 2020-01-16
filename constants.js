@@ -6,6 +6,7 @@ const defaultConstants = {
   PAGE_URL,
   // override PAGE_URL for now since the official link removed the links
   PAGE_URL: ARCHIVE_URL_PREFIX + PAGE_URL,
+  OUTPUT_ZIP_DIRECTORY: '',
   OUTPUT_ZIP_NAME: '3dbuzz.zip',
   CACHE_FOLDER_LOCATION: '.cache',
   TEMP_ZIP_WORK_DIR: '.zip-with-disc-work-dir-dont-mess-with-this',
