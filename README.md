@@ -10,7 +10,7 @@ Once unzipped you'll have a nicely organized directory with subdirectories for e
 
 SHORT VERSION:
 
-If you just want the finished product (all the unzipped files) then you can just download [3dbuzz.torrent](3dbuzz.torrent). You'll need a bit more than 220GB of free space to download all the files! However you can also select which subdirectories you want and leave the rest.
+If you just want the finished product (all the unzipped files) then you can just download ~[3dbuzz.torrent](3dbuzz.torrent)~ *(UPDATE: deleted temporarily while I recreate this without any missing files)*. You'll need a bit more than 220GB of free space to download all the files! However you can also select which subdirectories you want and leave the rest.
 
 LONG VERSION:
 
