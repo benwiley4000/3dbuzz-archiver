@@ -22,7 +22,8 @@ const defaultConstants = {
   // Node will split off anyway... not sure if that's still
   // true on 6-core processors but this is irrelevant for
   // most users anyway).
-  MAX_CONCURRENT: 4
+  MAX_CONCURRENT: 4,
+  VERBOSE_OUTPUT: false
 };
 
 const overriddenConstants = {};
